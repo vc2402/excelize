@@ -204,6 +204,7 @@ type decodeBlipFill struct {
 type decodeSpPr struct {
 	Xfrm     decodeXfrm     `xml:"xfrm"`
 	PrstGeom decodePrstGeom `xml:"prstGeom"`
+	BlipFill decodeBlipFill `xml:"blipFill"`
 }
 
 // decodePic elements encompass the definition of pictures within the

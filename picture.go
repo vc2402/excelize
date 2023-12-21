@@ -297,25 +297,34 @@ func (f *File) addSheetPicture(sheet string, rID int) error {
 // folder xl/drawings.
 func (f *File) countDrawings() int {
 	drawings := map[string]struct{}{}
-	f.Pkg.Range(func(k, v interface{}) bool {
-		if strings.Contains(k.(string), "xl/drawings/drawing") {
-			drawings[k.(string)] = struct{}{}
-		}
-		return true
-	})
-	f.Drawings.Range(func(rel, value interface{}) bool {
-		if strings.Contains(rel.(string), "xl/drawings/drawing") {
-			drawings[rel.(string)] = struct{}{}
-		}
-		return true
-	})
+	f.Pkg.Range(
+		func(k, v interface{}) bool {
+			if strings.Contains(k.(string), "xl/drawings/drawing") {
+				drawings[k.(string)] = struct{}{}
+			}
+			return true
+		},
+	)
+	f.Drawings.Range(
+		func(rel, value interface{}) bool {
+			if strings.Contains(rel.(string), "xl/drawings/drawing") {
+				drawings[rel.(string)] = struct{}{}
+			}
+			return true
+		},
+	)
 	return len(drawings)
 }
 
 // addDrawingPicture provides a function to add picture by given sheet,
 // drawingXML, cell, file name, width, height relationship index and format
 // sets.
-func (f *File) addDrawingPicture(sheet, drawingXML, cell, ext string, rID, hyperlinkRID int, img image.Config, opts *GraphicOptions) error {
+func (f *File) addDrawingPicture(
+	sheet, drawingXML, cell, ext string,
+	rID, hyperlinkRID int,
+	img image.Config,
+	opts *GraphicOptions,
+) error {
 	col, row, err := CellNameToCoordinates(cell)
 	if err != nil {
 		return err
@@ -332,7 +341,15 @@ func (f *File) addDrawingPicture(sheet, drawingXML, cell, ext string, rID, hyper
 		width = int(float64(width) * opts.ScaleX)
 		height = int(float64(height) * opts.ScaleY)
 	}
-	colStart, rowStart, colEnd, rowEnd, x2, y2 := f.positionObjectPixels(sheet, col, row, opts.OffsetX, opts.OffsetY, width, height)
+	colStart, rowStart, colEnd, rowEnd, x2, y2 := f.positionObjectPixels(
+		sheet,
+		col,
+		row,
+		opts.OffsetX,
+		opts.OffsetY,
+		width,
+		height,
+	)
 	content, cNvPrID, err := f.drawingParser(drawingXML)
 	if err != nil {
 		return err
@@ -395,12 +412,14 @@ func (f *File) addDrawingPicture(sheet, drawingXML, cell, ext string, rID, hyper
 // folder xl/media/image.
 func (f *File) countMedia() int {
 	count := 0
-	f.Pkg.Range(func(k, v interface{}) bool {
-		if strings.Contains(k.(string), "xl/media/image") {
-			count++
-		}
-		return true
-	})
+	f.Pkg.Range(
+		func(k, v interface{}) bool {
+			if strings.Contains(k.(string), "xl/media/image") {
+				count++
+			}
+			return true
+		},
+	)
 	return count
 }
 
@@ -410,16 +429,18 @@ func (f *File) countMedia() int {
 func (f *File) addMedia(file []byte, ext string) string {
 	count := f.countMedia()
 	var name string
-	f.Pkg.Range(func(k, existing interface{}) bool {
-		if !strings.HasPrefix(k.(string), "xl/media/image") {
+	f.Pkg.Range(
+		func(k, existing interface{}) bool {
+			if !strings.HasPrefix(k.(string), "xl/media/image") {
+				return true
+			}
+			if bytes.Equal(file, existing.([]byte)) {
+				name = k.(string)
+				return false
+			}
 			return true
-		}
-		if bytes.Equal(file, existing.([]byte)) {
-			name = k.(string)
-			return false
-		}
-		return true
-	})
+		},
+	)
 	if name != "" {
 		return name
 	}
@@ -473,7 +494,8 @@ func (f *File) GetPictures(sheet, cell string) ([]Picture, error) {
 	target := f.getSheetRelationshipsTargetByID(sheet, ws.Drawing.RID)
 	drawingXML := strings.TrimPrefix(strings.ReplaceAll(target, "..", "xl"), "/")
 	drawingRelationships := strings.ReplaceAll(
-		strings.ReplaceAll(target, "../drawings", "xl/drawings/_rels"), ".xml", ".xml.rels")
+		strings.ReplaceAll(target, "../drawings", "xl/drawings/_rels"), ".xml", ".xml.rels",
+	)
 
 	imgs, err := f.getCellImages(sheet, cell)
 	if err != nil {
@@ -502,7 +524,8 @@ func (f *File) GetPictureCells(sheet string) ([]string, error) {
 	target := f.getSheetRelationshipsTargetByID(sheet, ws.Drawing.RID)
 	drawingXML := strings.TrimPrefix(strings.ReplaceAll(target, "..", "xl"), "/")
 	drawingRelationships := strings.ReplaceAll(
-		strings.ReplaceAll(target, "../drawings", "xl/drawings/_rels"), ".xml", ".xml.rels")
+		strings.ReplaceAll(target, "../drawings", "xl/drawings/_rels"), ".xml", ".xml.rels",
+	)
 	embeddedImageCells, err := f.getEmbeddedImageCells(sheet)
 	if err != nil {
 		return nil, err
@@ -580,7 +603,11 @@ func (f *File) getPicture(row, col int, drawingXML, drawingRelationships string)
 		pic := Picture{Extension: filepath.Ext(r.Target), Format: &GraphicOptions{}}
 		if buffer, _ := f.Pkg.Load(strings.ReplaceAll(r.Target, "..", "xl")); buffer != nil {
 			pic.File = buffer.([]byte)
-			pic.Format.AltText = a.Pic.NvPicPr.CNvPr.Descr
+			if a.Pic != nil {
+				pic.Format.AltText = a.Pic.NvPicPr.CNvPr.Descr
+			} else if a.Sp != nil && a.Sp.SpPr != nil {
+				pic.Format.AltText = a.Sp.SpPr.BlipFill.Blip.Embed
+			}
 			pics = append(pics, pic)
 		}
 	}
@@ -588,7 +615,11 @@ func (f *File) getPicture(row, col int, drawingXML, drawingRelationships string)
 		pic := Picture{Extension: filepath.Ext(r.Target), Format: &GraphicOptions{}}
 		if buffer, _ := f.Pkg.Load(strings.ReplaceAll(r.Target, "..", "xl")); buffer != nil {
 			pic.File = buffer.([]byte)
-			pic.Format.AltText = a.Pic.NvPicPr.CNvPr.Descr
+			if a.Pic != nil {
+				pic.Format.AltText = a.Pic.NvPicPr.CNvPr.Descr
+			} else if a.Sp != nil && a.Sp.SpPr != nil {
+				pic.Format.AltText = a.Sp.SpPr.BlipFill.Blip.Embed
+			}
 			pics = append(pics, pic)
 		}
 	}
@@ -604,18 +635,34 @@ func (f *File) getPicture(row, col int, drawingXML, drawingRelationships string)
 // extractCellAnchor extract drawing object from cell anchor by giving drawing
 // cell anchor, drawing relationships part path, conditional and callback
 // function.
-func (f *File) extractCellAnchor(anchor *xdrCellAnchor, drawingRelationships string,
+func (f *File) extractCellAnchor(
+	anchor *xdrCellAnchor, drawingRelationships string,
 	cond func(from *xlsxFrom) bool, cb func(anchor *xdrCellAnchor, rels *xlsxRelationship),
 	cond2 func(from *decodeFrom) bool, cb2 func(anchor *decodeCellAnchor, rels *xlsxRelationship),
 ) {
 	var drawRel *xlsxRelationship
 	if anchor.GraphicFrame == "" {
-		if anchor.From != nil && anchor.Pic != nil {
+		if anchor.From != nil &&
+			(anchor.Pic != nil ||
+				anchor.Sp != nil && anchor.Sp.SpPr != nil && anchor.Sp.SpPr.BlipFill.Blip.Embed != "") {
 			if cond(anchor.From) {
-				if drawRel = f.getDrawingRelationships(drawingRelationships,
-					anchor.Pic.BlipFill.Blip.Embed); drawRel != nil {
-					if _, ok := supportedImageTypes[strings.ToLower(filepath.Ext(drawRel.Target))]; ok {
-						cb(anchor, drawRel)
+				if anchor.Pic != nil {
+					if drawRel = f.getDrawingRelationships(
+						drawingRelationships,
+						anchor.Pic.BlipFill.Blip.Embed,
+					); drawRel != nil {
+						if _, ok := supportedImageTypes[strings.ToLower(filepath.Ext(drawRel.Target))]; ok {
+							cb(anchor, drawRel)
+						}
+					}
+				} else {
+					if drawRel = f.getDrawingRelationships(
+						drawingRelationships,
+						anchor.Sp.SpPr.BlipFill.Blip.Embed,
+					); drawRel != nil {
+						if _, ok := supportedImageTypes[strings.ToLower(filepath.Ext(drawRel.Target))]; ok {
+							cb(anchor, drawRel)
+						}
 					}
 				}
 			}
@@ -628,7 +675,8 @@ func (f *File) extractCellAnchor(anchor *xdrCellAnchor, drawingRelationships str
 // extractDecodeCellAnchor extract drawing object from cell anchor by giving
 // decoded drawing cell anchor, drawing relationships part path, conditional and
 // callback function.
-func (f *File) extractDecodeCellAnchor(anchor *xdrCellAnchor, drawingRelationships string,
+func (f *File) extractDecodeCellAnchor(
+	anchor *xdrCellAnchor, drawingRelationships string,
 	cond func(from *decodeFrom) bool, cb func(anchor *decodeCellAnchor, rels *xlsxRelationship),
 ) {
 	var (
@@ -636,11 +684,29 @@ func (f *File) extractDecodeCellAnchor(anchor *xdrCellAnchor, drawingRelationshi
 		deCellAnchor = new(decodeCellAnchor)
 	)
 	_ = f.xmlNewDecoder(strings.NewReader("<decodeCellAnchor>" + anchor.GraphicFrame + "</decodeCellAnchor>")).Decode(&deCellAnchor)
-	if deCellAnchor.From != nil && deCellAnchor.Pic != nil {
+	if deCellAnchor.From != nil &&
+		(deCellAnchor.Pic != nil ||
+			deCellAnchor.Sp != nil && deCellAnchor.Sp.SpPr != nil && deCellAnchor.Sp.SpPr.BlipFill.Blip.Embed != "") {
 		if cond(deCellAnchor.From) {
-			if drawRel = f.getDrawingRelationships(drawingRelationships, deCellAnchor.Pic.BlipFill.Blip.Embed); drawRel != nil {
-				if _, ok := supportedImageTypes[strings.ToLower(filepath.Ext(drawRel.Target))]; ok {
-					cb(deCellAnchor, drawRel)
+			if deCellAnchor.Pic != nil {
+				if drawRel = f.getDrawingRelationships(
+					drawingRelationships,
+					deCellAnchor.Pic.BlipFill.Blip.Embed,
+				); drawRel != nil {
+					if _, ok := supportedImageTypes[strings.ToLower(filepath.Ext(drawRel.Target))]; ok {
+						cb(deCellAnchor, drawRel)
+					}
+				}
+			} else {
+				{
+					if drawRel = f.getDrawingRelationships(
+						drawingRelationships,
+						deCellAnchor.Sp.SpPr.BlipFill.Blip.Embed,
+					); drawRel != nil {
+						if _, ok := supportedImageTypes[strings.ToLower(filepath.Ext(drawRel.Target))]; ok {
+							cb(deCellAnchor, drawRel)
+						}
+					}
 				}
 			}
 		}
@@ -666,17 +732,23 @@ func (f *File) getDrawingRelationships(rels, rID string) *xlsxRelationship {
 // drawingsWriter provides a function to save xl/drawings/drawing%d.xml after
 // serialize structure.
 func (f *File) drawingsWriter() {
-	f.Drawings.Range(func(path, d interface{}) bool {
-		if d != nil {
-			v, _ := xml.Marshal(d.(*xlsxWsDr))
-			f.saveFileList(path.(string), v)
-		}
-		return true
-	})
+	f.Drawings.Range(
+		func(path, d interface{}) bool {
+			if d != nil {
+				v, _ := xml.Marshal(d.(*xlsxWsDr))
+				f.saveFileList(path.(string), v)
+			}
+			return true
+		},
+	)
 }
 
 // drawingResize calculate the height and width after resizing.
-func (f *File) drawingResize(sheet, cell string, width, height float64, opts *GraphicOptions) (w, h, c, r int, err error) {
+func (f *File) drawingResize(
+	sheet, cell string,
+	width, height float64,
+	opts *GraphicOptions,
+) (w, h, c, r int, err error) {
 	var mergeCells []MergeCell
 	mergeCells, err = f.GetMergeCells(sheet)
 	if err != nil {
@@ -737,14 +809,22 @@ func (f *File) getPictureCells(drawingXML, drawingRelationships string) ([]strin
 	cond2 := func(from *decodeFrom) bool { return true }
 	cb := func(a *xdrCellAnchor, r *xlsxRelationship) {
 		if _, ok := f.Pkg.Load(strings.ReplaceAll(r.Target, "..", "xl")); ok {
-			if cell, err := CoordinatesToCellName(a.From.Col+1, a.From.Row+1); err == nil && inStrSlice(cells, cell, true) == -1 {
+			if cell, err := CoordinatesToCellName(a.From.Col+1, a.From.Row+1); err == nil && inStrSlice(
+				cells,
+				cell,
+				true,
+			) == -1 {
 				cells = append(cells, cell)
 			}
 		}
 	}
 	cb2 := func(a *decodeCellAnchor, r *xlsxRelationship) {
 		if _, ok := f.Pkg.Load(strings.ReplaceAll(r.Target, "..", "xl")); ok {
-			if cell, err := CoordinatesToCellName(a.From.Col+1, a.From.Row+1); err == nil && inStrSlice(cells, cell, true) == -1 {
+			if cell, err := CoordinatesToCellName(a.From.Col+1, a.From.Row+1); err == nil && inStrSlice(
+				cells,
+				cell,
+				true,
+			) == -1 {
 				cells = append(cells, cell)
 			}
 		}

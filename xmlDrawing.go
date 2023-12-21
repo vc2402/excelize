@@ -174,6 +174,7 @@ type xlsxSpPr struct {
 	Xfrm      xlsxXfrm           `xml:"a:xfrm"`
 	PrstGeom  xlsxPrstGeom       `xml:"a:prstGeom"`
 	SolidFill *xlsxInnerXML      `xml:"a:solidFill"`
+	BlipFill  xlsxBlipFill       `xml:"xdr:blipFill"`
 	Ln        xlsxLineProperties `xml:"a:ln"`
 }
 
